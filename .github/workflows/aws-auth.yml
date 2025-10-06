@@ -1,0 +1,47 @@
+name: Deploy Node.js app to EC2 via SSM
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  AWS_REGION: ap-northeast-1
+  AWS_ROLE_ARN: arn:aws:iam::363414850588:role/GitHub_Assume_Role
+  EC2_INSTANCE_ID: i-0d1bad202d04389fd
+  DEPLOY_SCRIPT: /home/ec2-user/deploy.sh
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # ① リポジトリのコードをチェックアウト
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ② AWS認証（OIDC）
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::363414850588:role/GitHub_Assume_Role
+          aws-region: ap-northeast-1
+
+      # ③ デプロイスクリプトをEC2に送信
+      - name: Deploy via AWS SSM
+        run: |
+          aws ssm send-command \
+            --instance-ids "${{ env.EC2_INSTANCE_ID }}" \
+            --document-name "AWS-RunShellScript" \
+            --comment "Deploy via GitHub Actions" \
+            --parameters 'commands=[
+              "cd /home/ec2-user/workspace/myapp",
+              "git pull origin main",
+              "npm ci --omit=dev",
+              "pm2 restart all || pm2 start app.js --name myapp"
+            ]' \
+            --region ap-northeast-1
